@@ -1,67 +1,71 @@
-// Listen for changes on each input checkbox tag:
-// if the checkbox is checked, you must store the Amenity ID in a variable (dictionary or list)
-// if the checkbox is unchecked, you must remove the Amenity ID from the variable
-// update the h4 tag inside the div Amenities with the list of Amenities checked
+// const host = 'localhost';
+const host = '0.0.0.0';
 
-const $ = window.$;
-$(document).ready(function () {
-  const amenityList = {};
-  $('input:checkbox').change(function () {
-    const amenityId = $(this).attr('data-id');
-    const amenityName = $(this).attr('data-name');
+const checkedAmenities = {};
 
-    if (this.checked) {
-      amenityList[amenityId] = amenityName;
-    } else {
-      delete amenityList[amenityId];
+const checkAmenities = function () {
+  let displayAmenities = [];
+  $('.amenities .popover input').change(function () {
+    if ($(this).prop('checked')) {
+      checkedAmenities[$(this).attr('data-id')] = $(this).attr('data-name');
+    } else if (!$(this).prop('checked')) {
+      delete checkedAmenities[$(this).attr('data-id')];
     }
-
-    const addName = $.map(amenityList, function (name) {
-      return name;
-    }).join(', ');
-    $('div.amenities h4').text(addName);
+    displayAmenities = Object.values(checkedAmenities).sort();
+    if (displayAmenities.length != 0)
+      $('.amenities h4').text(displayAmenities.join(', '));
+    else
+      $('.amenities h4').html("&nbsp;");
   });
-});
+};
 
-
-$('html').ready(function () {
-  $.get('http://0.0.0.0:5001/api/v1/status/', function (data, txtStat) {
+const checkApiStatus = function () {
+  $.getJSON(`http://${host}:5001/api/v1/status`, (data) => {
     if (data.status === 'OK') {
       $('div#api_status').addClass('available');
     } else {
       $('div#api_status').removeClass('available');
     }
   });
+};
 
-  let places_list;
-
+const fetchPlaces = function (amenitiesFilter = {}) {
   $.ajax({
-    url: "http://0.0.0.0:5001/api/v1/places_search/",
-    headers: {"Content-Type": "application/json"},
-    data: JSON.stringify({}),
-    context: $("section.places"),
-    success: function (responses) {
-     places_list = responses.map(function(res) {
-       return `
-           <article>
-               <div class="title_box">
-                   <h2>${res.name}</h2>
-                   <div class="price_by_night">${res.price_by_night}</div>
-               </div>
-               <div class="information">
-                   <div class="max_guest">${res.max_guest} Guest(s)</div>
-                   <div class="number_rooms">${res.number_rooms} Bedroom(s)</div>
-                   <div class="number_bathrooms">${res.number_bathrooms} Bathroom(s)</div>
-               </div>
-               <div class="description">
-                   ${res.description}
-               </div>
-           </article>
-       `
-     })
- }
-}).done(function() {
-    $(this).html(places_list.join(''));
-});
-}
+    url: `http://${host}:5001/api/v1/places_search`,
+    type: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({ amenities: Object.keys(amenitiesFilter) }),
+    success: (data) => {
+      data.sort(function (a, b) {
+        return a.name.localeCompare(b.name);
+      });
+      $('section.places').empty();
+      for (const place of data) {
+        const article = `
+        <article>
+          <h2>${place.name}</h2>
+          <div class="price_by_night">$${place.price_by_night}</div>
+          <div class="information">
+            <div class="max_guest">${place.max_guest} Guests</div>
+            <div class="number_rooms">${place.number_rooms} Bedrooms</div>
+            <div class="number_bathrooms">${place.number_bathrooms} Bathrooms</div>
+          </div>
+          <div class="description">
+            ${place.description}
+          </div>
+        </article>`;
+        $('section.places').append(article);
+      }
+    }
+  }
+  );
+};
 
+$(() => {
+  checkAmenities();
+  checkApiStatus();
+  fetchPlaces(checkedAmenities);
+  $('button').on('click', () => {
+    fetchPlaces(checkedAmenities);
+  });
+});
